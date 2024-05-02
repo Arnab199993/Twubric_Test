@@ -22,9 +22,10 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import { visuallyHidden } from "@mui/utils";
 import PropTypes from "prop-types";
-import UserApi from "../Feature/UserApi";
-import DatePickerValue from "../DatePicker/DatePicker";
-
+import UserApi from "../Feature/UserApi/UserApi";
+import DatePickerValue from "../Feature/DatePicker/DatePicker";
+import SortedList from "../Feature/SortedList/SortedList";
+import DeleteUsers from "../Feature/DeleteUsers/Delete";
 function createData(id, name, calories, fat, carbs, protein) {
   return { id, name, calories, fat, carbs, protein };
 }
@@ -138,7 +139,12 @@ EnhancedTableHead.propTypes = {
 
 function EnhancedTableToolbar(props) {
   const { numSelected } = props;
+  const { sortedArray } = SortedList();
 
+  const handleSort = () => {
+    props.setSortedData(sortedArray);
+    props.setSortBtnClicked(true);
+  };
   return (
     <Toolbar
       sx={{
@@ -169,12 +175,12 @@ function EnhancedTableToolbar(props) {
           id="tableTitle"
           component="div"
         >
-          Nutrition
+          Twitter Users
         </Typography>
       )}
 
-      <Tooltip title="Filter list">
-        <IconButton>
+      <Tooltip title="Sort list">
+        <IconButton onClick={handleSort}>
           <FilterListIcon />
         </IconButton>
       </Tooltip>
@@ -196,7 +202,13 @@ export default function TableData() {
   const [showDatePickers, setShowDatePickers] = React.useState(false);
   const [startDate, setStartDate] = React.useState(null);
   const [endDate, setEndDate] = React.useState(null);
+  const [sortedDataList, setSortedData] = React.useState([]);
+  const [sortBtnClicked, setSortBtnClicked] = React.useState(false);
+  const [sortedPage, setSortedPage] = React.useState(0);
+  const [sortedRowsPerPage, setSortedRowsPerPage] = React.useState(5);
   const { fetchUserData, data } = UserApi();
+  const { handleDelete, DeletedData } = DeleteUsers();
+  console.log("DeletedDataaa", DeletedData);
 
   const handleRequestSort = (event, property) => {
     const isAsc = orderBy === property && order === "asc";
@@ -221,6 +233,15 @@ export default function TableData() {
     setDense(event.target.checked);
   };
 
+  const handleChangeSortedPage = (event, newPage) => {
+    setSortedPage(newPage);
+  };
+
+  const handleChangeSortedRowsPerPage = (event) => {
+    setSortedRowsPerPage(parseInt(event.target.value, 10));
+    setSortedPage(0);
+  };
+
   const isSelected = (id) => selected.indexOf(id) !== -1;
 
   const emptyRows =
@@ -243,6 +264,12 @@ export default function TableData() {
     );
   }, [filteredData, order, orderBy, page, rowsPerPage]);
 
+  const sortedVisibleRows = React.useMemo(() => {
+    const startIndex = sortedPage * sortedRowsPerPage;
+    const endIndex = startIndex + sortedRowsPerPage;
+    return sortedDataList.slice(startIndex, endIndex);
+  }, [sortedDataList, sortedPage, sortedRowsPerPage]);
+
   React.useEffect(() => {
     fetchUserData();
   }, []);
@@ -250,7 +277,11 @@ export default function TableData() {
   return (
     <Box sx={{ width: "100%" }}>
       <Paper sx={{ width: "100%", mb: 2 }}>
-        <EnhancedTableToolbar numSelected={selected.length} />
+        <EnhancedTableToolbar
+          numSelected={selected.length}
+          setSortedData={setSortedData}
+          setSortBtnClicked={setSortBtnClicked}
+        />
         <Box sx={{ display: "flex", justifyContent: "flex-end", pr: 2 }}>
           {showDatePickers && (
             <DatePickerValue
@@ -274,9 +305,8 @@ export default function TableData() {
               onJoinDateClick={handleJoinDateClick}
             />
             <TableBody>
-              {visibleRows &&
-                visibleRows?.map((row, index) => {
-                  return (
+              {sortBtnClicked
+                ? sortedVisibleRows.map((row) => (
                     <TableRow key={row?.uid}>
                       <TableCell component="th" scope="row" padding="none">
                         {row?.username}
@@ -311,15 +341,62 @@ export default function TableData() {
                       </TableCell>
 
                       <TableCell align="right">
-                        <IconButton
-                          onClick={() => console.log("Remove button clicked")}
-                        >
+                        <IconButton>
                           <DeleteIcon />
                         </IconButton>
                       </TableCell>
                     </TableRow>
-                  );
-                })}
+                  ))
+                : visibleRows.map((row, index) => {
+                    return (
+                      <TableRow key={row?.uid}>
+                        <TableCell component="th" scope="row" padding="none">
+                          {row?.username}
+                        </TableCell>
+                        <TableCell component="th" scope="row" padding="none">
+                          {row?.twubric?.friends}
+                        </TableCell>
+                        <TableCell align="right">
+                          {row?.twubric?.influence}
+                        </TableCell>
+                        <TableCell align="right">
+                          {row?.twubric?.chirpiness}
+                        </TableCell>
+                        <TableCell align="right">
+                          {row?.twubric?.total}
+                        </TableCell>
+                        <TableCell align="right">
+                          {row?.join_date &&
+                            new Date(row?.join_date * 1000).toLocaleDateString(
+                              "en-US",
+                              {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                              }
+                            )}
+                        </TableCell>
+                        <TableCell align="right">
+                          <img
+                            src={row?.image}
+                            alt="User Avatar"
+                            style={{ width: 50, height: 50 }}
+                          />
+                        </TableCell>
+
+                        <TableCell align="right">
+                          <IconButton
+                            onClick={() => {
+                              handleDelete(row?.uid);
+                            }}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+
               {emptyRows > 0 && (
                 <TableRow style={{ height: (dense ? 33 : 53) * emptyRows }}>
                   <TableCell colSpan={8} />
@@ -331,11 +408,17 @@ export default function TableData() {
         <TablePagination
           rowsPerPageOptions={[5, 10, 25]}
           component="div"
-          count={filteredData?.length}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={handleChangePage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
+          count={sortBtnClicked ? sortedDataList.length : filteredData.length}
+          rowsPerPage={sortBtnClicked ? sortedRowsPerPage : rowsPerPage}
+          page={sortBtnClicked ? sortedPage : page}
+          onPageChange={
+            sortBtnClicked ? handleChangeSortedPage : handleChangePage
+          }
+          onRowsPerPageChange={
+            sortBtnClicked
+              ? handleChangeSortedRowsPerPage
+              : handleChangeRowsPerPage
+          }
         />
       </Paper>
       <FormControlLabel

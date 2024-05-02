@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { apiService } from "../Services/ApiService";
+import { apiService } from "../../Services/ApiService";
 const UserApi = () => {
   const [data, setData] = useState([]);
   const fetchUserData = async () => {
